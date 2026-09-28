@@ -236,8 +236,8 @@
 <body>
 
   <div class="hero">
-    <h1>YannRzy Uploader</h1>
-    <p>Uploader MP3, MP4, atau JPG. Link langsung jadi setelah selesai.</p>
+    <h1>Upload File</h1>
+    <p>Upload MP3, MP4, atau JPG. Link langsung jadi setelah selesai.</p>
   </div>
 
   <div class="label mono">// UPLOAD AREA</div>
@@ -253,6 +253,9 @@
     <span>atau drag &amp; drop di sini</span>
     <input type="file" id="fileInput" accept=".mp3,.mp4,.jpg,.jpeg,audio/mpeg,video/mp4,image/jpeg" multiple>
   </div>
+
+  <div class="label mono" id="resultLabel" style="display:none">// HASIL UPLOAD</div>
+  <div class="filelist" id="resultList"></div>
 
   <div class="label mono">// RIWAYAT UPLOAD (<span id="fileCount">0</span>)</div>
   <div class="filelist" id="fileList">
@@ -299,7 +302,7 @@
         </span>
       </a>
     </div>
-    <div class="copyright mono">© 2026 YannRzy - Uploader. All Rights Reserved.</div>
+    <div class="copyright mono">© 2026 YannRzy - Tools. All Rights Reserved.</div>
   </div>
 
 <script type="module">
@@ -308,6 +311,8 @@
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
   const fileList = document.getElementById('fileList');
+  const resultList = document.getElementById('resultList');
+  const resultLabel = document.getElementById('resultLabel');
   const emptyState = document.getElementById('emptyState');
   const fileCount = document.getElementById('fileCount');
 
@@ -315,8 +320,8 @@
   const MIME = { mp3: 'audio/mpeg', mp4: 'video/mp4', jpg: 'image/jpeg' };
   const KEY = 'uploadHistory';
 
-  let pending = [];   // sedang upload / gagal (tidak disimpan)
-  let history = load();
+  let session = [];   // upload di sesi ini (dengan preview)
+  let history = load(); // riwayat permanen di browser
 
   function load() {
     try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
@@ -324,7 +329,6 @@
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(history.slice(0, 100))); } catch {}
   }
-
   function extOf(file) {
     const n = file.name.toLowerCase();
     if (n.endsWith('.mp3')) return 'mp3';
@@ -361,7 +365,8 @@
         multipart: item.file.size > 8 * 1024 * 1024,
         onUploadProgress: ({ percentage }) => { item.progress = percentage; render(); }
       });
-      pending = pending.filter(p => p.id !== item.id);
+      item.status = 'done';
+      item.link = `${location.origin}/${pathname}`;
       history.unshift({ code: item.code, ext: item.ext, name: item.file.name, size: item.file.size, time: Date.now() });
       save();
     } catch (e) {
@@ -376,8 +381,8 @@
       const ext = extOf(file);
       if (!ext) continue;
       if (file.size > MAX) { alert(file.name + ' terlalu besar (maks 100 MB)'); continue; }
-      const item = { id: crypto.randomUUID(), file, ext, code: randomCode(), status: 'uploading', progress: 0 };
-      pending.unshift(item);
+      const item = { id: crypto.randomUUID(), file, ext, code: randomCode(), status: 'uploading', progress: 0, local: URL.createObjectURL(file) };
+      session.unshift(item);
       startUpload(item);
     }
     render();
@@ -393,61 +398,79 @@
     const meta = document.createElement('div');
     meta.className = 'file-meta';
     const n = document.createElement('div'); n.className = 'file-name'; n.textContent = name;
-    const s = document.createElement('div'); s.className = 'file-sub mono'; s.textContent = subText;
-    meta.append(n, s);
+    const sub = document.createElement('div'); sub.className = 'file-sub mono'; sub.textContent = subText;
+    meta.append(n, sub);
     wrap.append(ic, meta);
     return wrap;
   }
 
-  function render() {
-    fileCount.textContent = pending.length + history.length;
-    fileList.innerHTML = '';
-    if (!pending.length && !history.length) { fileList.appendChild(emptyState); return; }
+  function closeBtn(fn) {
+    const x = document.createElement('div');
+    x.className = 'file-remove'; x.textContent = '✕'; x.onclick = fn;
+    return x;
+  }
 
-    pending.forEach(item => {
+  function linkRow(link) {
+    const row = document.createElement('div'); row.className = 'link-row';
+    const a = document.createElement('a'); a.className = 'link-box mono'; a.textContent = link;
+    a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit'; a.style.textDecoration = 'none';
+    const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = 'COPY';
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); } catch { prompt('Salin link:', link); }
+      btn.textContent = 'COPIED!'; setTimeout(() => btn.textContent = 'COPY', 1500);
+    };
+    row.append(a, btn);
+    return row;
+  }
+
+  function renderResults() {
+    resultList.innerHTML = '';
+    resultLabel.style.display = session.length ? '' : 'none';
+    session.forEach(item => {
       const card = document.createElement('div');
       card.className = 'file-card';
-      const top = head(item.ext, item.file.name, `.${item.ext.toUpperCase()} · ${fmtSize(item.file.size)}`, null);
+      const top = head(item.ext, item.file.name, `.${item.ext.toUpperCase()} · ${fmtSize(item.file.size)}`, item.ext === 'jpg' ? item.local : null);
+      top.appendChild(closeBtn(() => { URL.revokeObjectURL(item.local); session = session.filter(x => x.id !== item.id); render(); }));
       card.appendChild(top);
+
       if (item.status === 'uploading') {
         card.insertAdjacentHTML('beforeend',
           `<div class="progress"><div style="width:${Math.round(item.progress)}%"></div></div>
            <div class="file-sub mono" style="margin-top:8px">Mengupload… ${Math.round(item.progress)}%</div>`);
-      } else {
+      } else if (item.status === 'error') {
         const e = document.createElement('div'); e.className = 'err'; e.textContent = 'Gagal: ' + item.error;
-        const x = document.createElement('div'); x.className = 'file-remove'; x.textContent = '✕';
-        x.onclick = () => { pending = pending.filter(p => p.id !== item.id); render(); };
-        top.appendChild(x);
         card.appendChild(e);
+      } else {
+        card.appendChild(linkRow(item.link));
+        const pw = document.createElement('div'); pw.className = 'preview-wrap';
+        if (item.ext === 'jpg') pw.innerHTML = `<img src="${item.local}">`;
+        else if (item.ext === 'mp3') pw.innerHTML = `<audio controls src="${item.local}"></audio>`;
+        else pw.innerHTML = `<video controls src="${item.local}"></video>`;
+        card.appendChild(pw);
       }
-      fileList.appendChild(card);
+      resultList.appendChild(card);
     });
+  }
 
+  function renderHistory() {
+    fileCount.textContent = history.length;
+    fileList.innerHTML = '';
+    if (!history.length) { fileList.appendChild(emptyState); return; }
     history.forEach((h, idx) => {
       const link = linkOf(h);
       const card = document.createElement('div');
       card.className = 'file-card';
       const top = head(h.ext, h.name, `.${h.ext.toUpperCase()} · ${fmtSize(h.size)} · ${fmtDate(h.time)}`, h.ext === 'jpg' ? link : null);
-      const x = document.createElement('div'); x.className = 'file-remove'; x.textContent = '✕';
-      x.onclick = () => {
+      top.appendChild(closeBtn(() => {
         if (confirm('Hapus dari riwayat? File di server tidak ikut terhapus.')) { history.splice(idx, 1); save(); render(); }
-      };
-      top.appendChild(x);
+      }));
       card.appendChild(top);
-
-      const row = document.createElement('div'); row.className = 'link-row';
-      const a = document.createElement('a'); a.className = 'link-box mono'; a.textContent = link;
-      a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit'; a.style.textDecoration = 'none';
-      const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = 'COPY';
-      btn.onclick = async () => {
-        try { await navigator.clipboard.writeText(link); } catch { prompt('Salin link:', link); }
-        btn.textContent = 'COPIED!'; setTimeout(() => btn.textContent = 'COPY', 1500);
-      };
-      row.append(a, btn);
-      card.appendChild(row);
+      card.appendChild(linkRow(link));
       fileList.appendChild(card);
     });
   }
+
+  function render() { renderResults(); renderHistory(); }
 
   dropzone.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', e => { addFiles(Array.from(e.target.files)); fileInput.value = ''; });
