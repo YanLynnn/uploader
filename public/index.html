@@ -236,8 +236,8 @@
 <body>
 
   <div class="hero">
-    <h1>Upload File Kamu</h1>
-    <p>Seret file ke sini atau pilih dari perangkat. Setelah selesai, kamu langsung dapat link yang bisa dibagikan. Mendukung MP3, MP4, dan JPG.</p>
+    <h1>YannRzy Uploader</h1>
+    <p>Uploader MP3, MP4, atau JPG. Link langsung jadi setelah selesai.</p>
   </div>
 
   <div class="label mono">// UPLOAD AREA</div>
@@ -253,15 +253,10 @@
     <span>atau drag &amp; drop di sini</span>
     <input type="file" id="fileInput" accept=".mp3,.mp4,.jpg,.jpeg,audio/mpeg,video/mp4,image/jpeg" multiple>
   </div>
-  <div class="types">
-    <div class="type-chip">.MP3</div>
-    <div class="type-chip">.MP4</div>
-    <div class="type-chip">.JPG</div>
-  </div>
 
-  <div class="label mono">// HASIL UPLOAD (<span id="fileCount">0</span>)</div>
+  <div class="label mono">// RIWAYAT UPLOAD (<span id="fileCount">0</span>)</div>
   <div class="filelist" id="fileList">
-    <div class="empty" id="emptyState">Belum ada file yang diupload.</div>
+    <div class="empty" id="emptyState">Belum ada riwayat upload.</div>
   </div>
 
   <div class="contact">
@@ -304,7 +299,7 @@
         </span>
       </a>
     </div>
-    <div class="copyright mono">© 2026 YannRzy - Tools. All Rights Reserved.</div>
+    <div class="copyright mono">© 2026 YannRzy - Uploader. All Rights Reserved.</div>
   </div>
 
 <script type="module">
@@ -318,7 +313,17 @@
 
   const MAX = 100 * 1024 * 1024;
   const MIME = { mp3: 'audio/mpeg', mp4: 'video/mp4', jpg: 'image/jpeg' };
-  let items = [];
+  const KEY = 'uploadHistory';
+
+  let pending = [];   // sedang upload / gagal (tidak disimpan)
+  let history = load();
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(history.slice(0, 100))); } catch {}
+  }
 
   function extOf(file) {
     const n = file.name.toLowerCase();
@@ -338,7 +343,13 @@
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(1) + ' MB';
   }
+  function fmtDate(t) {
+    const d = new Date(t);
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+  }
   const icon = t => t === 'mp3' ? '🎵' : t === 'mp4' ? '🎬' : '🖼️';
+  const linkOf = h => `${location.origin}/${h.code}.${h.ext}`;
 
   async function startUpload(item) {
     const pathname = `${item.code}.${item.ext}`;
@@ -350,8 +361,9 @@
         multipart: item.file.size > 8 * 1024 * 1024,
         onUploadProgress: ({ percentage }) => { item.progress = percentage; render(); }
       });
-      item.status = 'done';
-      item.link = `${location.origin}/${pathname}`;
+      pending = pending.filter(p => p.id !== item.id);
+      history.unshift({ code: item.code, ext: item.ext, name: item.file.name, size: item.file.size, time: Date.now() });
+      save();
     } catch (e) {
       item.status = 'error';
       item.error = e.message || 'Upload gagal';
@@ -364,53 +376,75 @@
       const ext = extOf(file);
       if (!ext) continue;
       if (file.size > MAX) { alert(file.name + ' terlalu besar (maks 100 MB)'); continue; }
-      const item = { id: crypto.randomUUID(), file, ext, code: randomCode(), status: 'uploading', progress: 0, local: URL.createObjectURL(file) };
-      items.unshift(item);
+      const item = { id: crypto.randomUUID(), file, ext, code: randomCode(), status: 'uploading', progress: 0 };
+      pending.unshift(item);
       startUpload(item);
     }
     render();
   }
 
+  function head(ext, name, subText, thumbUrl) {
+    const wrap = document.createElement('div');
+    wrap.className = 'file-top';
+    const ic = document.createElement('div');
+    ic.className = 'file-icon';
+    if (thumbUrl) { const im = document.createElement('img'); im.loading = 'lazy'; im.src = thumbUrl; ic.appendChild(im); }
+    else ic.textContent = icon(ext);
+    const meta = document.createElement('div');
+    meta.className = 'file-meta';
+    const n = document.createElement('div'); n.className = 'file-name'; n.textContent = name;
+    const s = document.createElement('div'); s.className = 'file-sub mono'; s.textContent = subText;
+    meta.append(n, s);
+    wrap.append(ic, meta);
+    return wrap;
+  }
+
   function render() {
-    fileCount.textContent = items.length;
+    fileCount.textContent = pending.length + history.length;
     fileList.innerHTML = '';
-    if (!items.length) { fileList.appendChild(emptyState); return; }
-    items.forEach(item => {
+    if (!pending.length && !history.length) { fileList.appendChild(emptyState); return; }
+
+    pending.forEach(item => {
       const card = document.createElement('div');
       card.className = 'file-card';
-      card.innerHTML = `
-        <div class="file-top">
-          <div class="file-icon"></div>
-          <div class="file-meta">
-            <div class="file-name"></div>
-            <div class="file-sub mono">.${item.ext.toUpperCase()} · ${fmtSize(item.file.size)}</div>
-          </div>
-        </div>`;
-      card.querySelector('.file-name').textContent = item.file.name;
-      const ic = card.querySelector('.file-icon');
-      if (item.ext === 'jpg') { const im = document.createElement('img'); im.src = item.local; ic.appendChild(im); }
-      else ic.textContent = icon(item.ext);
-
+      const top = head(item.ext, item.file.name, `.${item.ext.toUpperCase()} · ${fmtSize(item.file.size)}`, null);
+      card.appendChild(top);
       if (item.status === 'uploading') {
-        card.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(item.progress)}%"></div></div>
-          <div class="file-sub mono" style="margin-top:8px">Mengupload… ${Math.round(item.progress)}%</div>`);
-      } else if (item.status === 'error') {
-        const e = document.createElement('div'); e.className = 'err'; e.textContent = 'Gagal: ' + item.error; card.appendChild(e);
+        card.insertAdjacentHTML('beforeend',
+          `<div class="progress"><div style="width:${Math.round(item.progress)}%"></div></div>
+           <div class="file-sub mono" style="margin-top:8px">Mengupload… ${Math.round(item.progress)}%</div>`);
       } else {
-        const row = document.createElement('div'); row.className = 'link-row';
-        const box = document.createElement('div'); box.className = 'link-box mono'; box.textContent = item.link;
-        const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = 'COPY';
-        btn.onclick = async () => {
-          try { await navigator.clipboard.writeText(item.link); } catch { prompt('Salin link:', item.link); }
-          btn.textContent = 'COPIED!'; setTimeout(() => btn.textContent = 'COPY', 1500);
-        };
-        row.append(box, btn); card.appendChild(row);
-        const pw = document.createElement('div'); pw.className = 'preview-wrap';
-        if (item.ext === 'jpg') pw.innerHTML = `<img src="${item.local}">`;
-        else if (item.ext === 'mp3') pw.innerHTML = `<audio controls src="${item.local}"></audio>`;
-        else pw.innerHTML = `<video controls src="${item.local}"></video>`;
-        card.appendChild(pw);
+        const e = document.createElement('div'); e.className = 'err'; e.textContent = 'Gagal: ' + item.error;
+        const x = document.createElement('div'); x.className = 'file-remove'; x.textContent = '✕';
+        x.onclick = () => { pending = pending.filter(p => p.id !== item.id); render(); };
+        top.appendChild(x);
+        card.appendChild(e);
       }
+      fileList.appendChild(card);
+    });
+
+    history.forEach((h, idx) => {
+      const link = linkOf(h);
+      const card = document.createElement('div');
+      card.className = 'file-card';
+      const top = head(h.ext, h.name, `.${h.ext.toUpperCase()} · ${fmtSize(h.size)} · ${fmtDate(h.time)}`, h.ext === 'jpg' ? link : null);
+      const x = document.createElement('div'); x.className = 'file-remove'; x.textContent = '✕';
+      x.onclick = () => {
+        if (confirm('Hapus dari riwayat? File di server tidak ikut terhapus.')) { history.splice(idx, 1); save(); render(); }
+      };
+      top.appendChild(x);
+      card.appendChild(top);
+
+      const row = document.createElement('div'); row.className = 'link-row';
+      const a = document.createElement('a'); a.className = 'link-box mono'; a.textContent = link;
+      a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit'; a.style.textDecoration = 'none';
+      const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = 'COPY';
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(link); } catch { prompt('Salin link:', link); }
+        btn.textContent = 'COPIED!'; setTimeout(() => btn.textContent = 'COPY', 1500);
+      };
+      row.append(a, btn);
+      card.appendChild(row);
       fileList.appendChild(card);
     });
   }
