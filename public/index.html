@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>File Uploader</title>
+<style>
+  :root {
+    --cream: #FCEBC5;
+    --card: #FFF7E6;
+    --ink: #17140F;
+    --yellow: #F6D343;
+    --mint: #4CDFA0;
+    --mint-dark: #2FBE84;
+    --line: #17140F;
+    --muted: #6b6455;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Space Grotesk', 'Segoe UI', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    padding: 24px 18px calc(40px + env(safe-area-inset-bottom, 0px));
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---- Top status pill ---- */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--yellow);
+    border: 3px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 22px;
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #1c8b56;
+    box-shadow: 0 0 0 2px rgba(28,139,86,0.25);
+  }
+
+  /* ---- Header card ---- */
+  .hero {
+    background: var(--mint);
+    border: 3px solid var(--line);
+    border-radius: 22px;
+    box-shadow: 8px 8px 0 var(--line);
+    padding: 26px 24px;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 6px;
+    font-size: 30px;
+    line-height: 1.1;
+    font-weight: 800;
+  }
+  .hero p {
+    margin: 0;
+    font-size: 14.5px;
+    color: #17140F;
+    opacity: 0.75;
+    max-width: 46ch;
+  }
+
+  /* ---- Section label ---- */
+  .label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--muted);
+    margin: 26px 0 10px;
+  }
+
+  /* ---- Drop zone ---- */
+  .dropzone {
+    background: var(--card);
+    border: 3px dashed var(--line);
+    border-radius: 20px;
+    padding: 38px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    box-shadow: 6px 6px 0 var(--line);
+  }
+  .dropzone:active { transform: translate(2px, 2px); box-shadow: 4px 4px 0 var(--line); }
+  .dropzone.drag {
+    background: #FFF1C9;
+    border-color: var(--line);
+    box-shadow: 6px 6px 0 var(--mint-dark);
+  }
+  .dropzone .icon {
+    width: 54px; height: 54px;
+    margin: 0 auto 12px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--yellow);
+    border: 3px solid var(--line);
+    border-radius: 14px;
+  }
+  .dropzone strong { font-size: 16px; display: block; margin-bottom: 4px; }
+  .dropzone span { font-size: 13px; color: var(--muted); }
+  input[type=file] { display: none; }
+
+  /* ---- Accepted types row ---- */
+  .types {
+    display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+  }
+  .type-chip {
+    font-size: 12px; font-weight: 700;
+    padding: 6px 12px;
+    border: 2.5px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+  }
+
+  /* ---- File list ---- */
+  .filelist { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .file-card {
+    background: var(--card);
+    border: 3px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 6px 6px 0 var(--line);
+    padding: 14px;
+  }
+  .file-top { display: flex; align-items: center; gap: 12px; }
+  .file-icon {
+    width: 44px; height: 44px; flex: none;
+    border: 2.5px solid var(--line);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    overflow: hidden;
+  }
+  .file-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .file-meta { flex: 1; min-width: 0; }
+  .file-name { font-weight: 700; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .file-remove {
+    border: 2.5px solid var(--line);
+    background: #fff;
+    border-radius: 10px;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex: none;
+    font-weight: 800;
+  }
+  .file-remove:active { background: #FFDEDE; }
+  .preview-wrap { margin-top: 12px; }
+  .preview-wrap img { width: 100%; border-radius: 12px; border: 2.5px solid var(--line); display: block; max-height: 260px; object-fit: cover; }
+  .preview-wrap audio, .preview-wrap video { width: 100%; border-radius: 12px; border: 2.5px solid var(--line); display: block; background: #000; }
+
+  .empty {
+    text-align: center;
+    padding: 22px 10px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  /* ---- Contact / footer ---- */
+  .contact {
+    margin-top: 34px;
+    background: var(--cream);
+    border-top: 3px solid var(--line);
+    padding-top: 22px;
+  }
+  .contact-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-bottom: 16px;
+  }
+  .contact-list { display: flex; flex-direction: column; }
+  .contact-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 2px;
+    text-decoration: none;
+    color: var(--ink);
+    border-bottom: 1.5px solid rgba(23,20,15,0.15);
+  }
+  .contact-row:last-child { border-bottom: none; }
+  .contact-row .c-icon {
+    width: 22px; height: 22px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .contact-row .c-label {
+    flex: 1;
+    font-weight: 700;
+    font-size: 17px;
+  }
+  .contact-row .c-ext {
+    opacity: 0.55;
+    flex: none;
+  }
+  .copyright {
+    text-align: center;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #948a72;
+    margin-top: 18px;
+    padding-bottom: 10px;
+  }
+
+  .link-row { display:flex; gap:8px; margin-top:12px; }
+  .link-box {
+    flex:1; min-width:0; font-size:13px; font-weight:700;
+    background:#fff; border:2.5px solid var(--line); border-radius:12px;
+    padding:10px 12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .btn {
+    border:2.5px solid var(--line); background:var(--mint); color:var(--ink);
+    border-radius:12px; padding:0 16px; font-weight:800; font-size:13px;
+    cursor:pointer; box-shadow:3px 3px 0 var(--line); font-family:inherit;
+  }
+  .btn:active { transform:translate(2px,2px); box-shadow:1px 1px 0 var(--line); }
+  .progress { height:14px; border:2.5px solid var(--line); border-radius:999px; background:#fff; overflow:hidden; margin-top:12px; }
+  .progress > div { height:100%; width:0%; background:var(--yellow); border-right:2.5px solid var(--line); transition:width .15s; }
+  .err { margin-top:12px; font-size:13px; font-weight:700; color:#b3261e; }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <h1>Upload File Kamu</h1>
+    <p>Seret file ke sini atau pilih dari perangkat. Setelah selesai, kamu langsung dapat link yang bisa dibagikan. Mendukung MP3, MP4, dan JPG.</p>
+  </div>
+
+  <div class="label mono">// UPLOAD AREA</div>
+  <div class="dropzone" id="dropzone">
+    <div class="icon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#17140F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/>
+        <path d="M7 8l5-5 5 5"/>
+        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+      </svg>
+    </div>
+    <strong>Tap untuk pilih file</strong>
+    <span>atau drag &amp; drop di sini</span>
+    <input type="file" id="fileInput" accept=".mp3,.mp4,.jpg,.jpeg,audio/mpeg,video/mp4,image/jpeg" multiple>
+  </div>
+  <div class="types">
+    <div class="type-chip">.MP3</div>
+    <div class="type-chip">.MP4</div>
+    <div class="type-chip">.JPG</div>
+  </div>
+
+  <div class="label mono">// HASIL UPLOAD (<span id="fileCount">0</span>)</div>
+  <div class="filelist" id="fileList">
+    <div class="empty" id="emptyState">Belum ada file yang diupload.</div>
+  </div>
+
+  <div class="contact">
+    <div class="contact-title mono">CONTACT OWNER &amp; ADMIN</div>
+    <div class="contact-list">
+      <a class="contact-row" href="https://whatsapp.com/channel/0029VaoMGuLA89MbfGh62V16" target="_blank" rel="noopener">
+        <span class="c-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#17140F"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.29-1.39a9.9 9.9 0 0 0 4.75 1.21h.01c5.46 0 9.9-4.45 9.9-9.91S17.5 2 12.04 2zm0 18.06h-.01a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.14.82.84-3.06-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.52 3.68-8.2 8.21-8.2 2.2 0 4.26.86 5.81 2.41a8.15 8.15 0 0 1 2.4 5.8c0 4.52-3.68 8.24-8.17 8.24zm4.5-6.14c-.25-.12-1.46-.72-1.68-.8-.23-.08-.39-.12-.56.13-.16.24-.64.8-.78.96-.15.16-.29.18-.53.06-.25-.12-1.04-.38-1.98-1.22-.73-.65-1.23-1.46-1.37-1.7-.15-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.08-.16.04-.31-.02-.43-.06-.12-.56-1.36-.77-1.86-.2-.48-.41-.42-.56-.43h-.48c-.16 0-.43.06-.66.31-.22.25-.87.85-.87 2.08 0 1.23.89 2.41 1.02 2.58.12.16 1.75 2.68 4.25 3.75.59.26 1.06.41 1.42.53.6.19 1.14.16 1.57.1.48-.07 1.46-.6 1.67-1.17.2-.58.2-1.08.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
+        </span>
+        <span class="c-label">WhatsApp</span>
+        <span class="c-ext">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#17140F" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+        </span>
+      </a>
+      <a class="contact-row" href="https://github.com/YanLynnn" target="_blank" rel="noopener">
+        <span class="c-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#17140F"><path d="M12 2C6.48 2 2 6.58 2 12.19c0 4.49 2.87 8.3 6.84 9.65.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.46-1.19-1.11-1.51-1.11-1.51-.91-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.55 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.73 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 6.85c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.47.1 2.73.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.95.68 1.92 0 1.39-.01 2.51-.01 2.85 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.19C22 6.58 17.52 2 12 2z"/></svg>
+        </span>
+        <span class="c-label">GitHub</span>
+        <span class="c-ext">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#17140F" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+        </span>
+      </a>
+      <a class="contact-row" href="https://www.youtube.com/@yannrzy" target="_blank" rel="noopener">
+        <span class="c-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="#17140F"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.42a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33 2.78 2.78 0 0 0 1.95 2C5.12 19.5 12 19.5 12 19.5s6.88 0 8.59-.42a2.78 2.78 0 0 0 1.95-2 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33zM9.75 15.02V8.48l5.75 3.27z"/></svg>
+        </span>
+        <span class="c-label">YouTube</span>
+        <span class="c-ext">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#17140F" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+        </span>
+      </a>
+      <a class="contact-row" href="https://saweria.co/sajiyanxyz" target="_blank" rel="noopener">
+        <span class="c-icon">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="#17140F"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.4 1.9 4.8 5.4 4a5 5 0 0 1 6.6 2.1A5 5 0 0 1 18.6 4c3.5.8 5 4.4 3.4 7.8C19.5 16.4 12 21 12 21z"/></svg>
+        </span>
+        <span class="c-label">Support / Donate</span>
+        <span class="c-ext">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#17140F" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+        </span>
+      </a>
+    </div>
+    <div class="copyright mono">© 2026 YannRzy - Tools. All Rights Reserved.</div>
+  </div>
+
+<script type="module">
+  import { upload } from 'https://esm.sh/@vercel/blob@0.27.0/client';
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileList = document.getElementById('fileList');
+  const emptyState = document.getElementById('emptyState');
+  const fileCount = document.getElementById('fileCount');
+
+  const MAX = 100 * 1024 * 1024;
+  const MIME = { mp3: 'audio/mpeg', mp4: 'video/mp4', jpg: 'image/jpeg' };
+  let items = [];
+
+  function extOf(file) {
+    const n = file.name.toLowerCase();
+    if (n.endsWith('.mp3')) return 'mp3';
+    if (n.endsWith('.mp4')) return 'mp4';
+    if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'jpg';
+    return null;
+  }
+  function randomCode(len = 8) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const arr = new Uint32Array(len);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, n => chars[n % chars.length]).join('');
+  }
+  function fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+  const icon = t => t === 'mp3' ? '🎵' : t === 'mp4' ? '🎬' : '🖼️';
+
+  async function startUpload(item) {
+    const pathname = `${item.code}.${item.ext}`;
+    try {
+      await upload(pathname, item.file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+        contentType: MIME[item.ext],
+        multipart: item.file.size > 8 * 1024 * 1024,
+        onUploadProgress: ({ percentage }) => { item.progress = percentage; render(); }
+      });
+      item.status = 'done';
+      item.link = `${location.origin}/${pathname}`;
+    } catch (e) {
+      item.status = 'error';
+      item.error = e.message || 'Upload gagal';
+    }
+    render();
+  }
+
+  function addFiles(files) {
+    for (const file of files) {
+      const ext = extOf(file);
+      if (!ext) continue;
+      if (file.size > MAX) { alert(file.name + ' terlalu besar (maks 100 MB)'); continue; }
+      const item = { id: crypto.randomUUID(), file, ext, code: randomCode(), status: 'uploading', progress: 0, local: URL.createObjectURL(file) };
+      items.unshift(item);
+      startUpload(item);
+    }
+    render();
+  }
+
+  function render() {
+    fileCount.textContent = items.length;
+    fileList.innerHTML = '';
+    if (!items.length) { fileList.appendChild(emptyState); return; }
+    items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'file-card';
+      card.innerHTML = `
+        <div class="file-top">
+          <div class="file-icon"></div>
+          <div class="file-meta">
+            <div class="file-name"></div>
+            <div class="file-sub mono">.${item.ext.toUpperCase()} · ${fmtSize(item.file.size)}</div>
+          </div>
+        </div>`;
+      card.querySelector('.file-name').textContent = item.file.name;
+      const ic = card.querySelector('.file-icon');
+      if (item.ext === 'jpg') { const im = document.createElement('img'); im.src = item.local; ic.appendChild(im); }
+      else ic.textContent = icon(item.ext);
+
+      if (item.status === 'uploading') {
+        card.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(item.progress)}%"></div></div>
+          <div class="file-sub mono" style="margin-top:8px">Mengupload… ${Math.round(item.progress)}%</div>`);
+      } else if (item.status === 'error') {
+        const e = document.createElement('div'); e.className = 'err'; e.textContent = 'Gagal: ' + item.error; card.appendChild(e);
+      } else {
+        const row = document.createElement('div'); row.className = 'link-row';
+        const box = document.createElement('div'); box.className = 'link-box mono'; box.textContent = item.link;
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = 'COPY';
+        btn.onclick = async () => {
+          try { await navigator.clipboard.writeText(item.link); } catch { prompt('Salin link:', item.link); }
+          btn.textContent = 'COPIED!'; setTimeout(() => btn.textContent = 'COPY', 1500);
+        };
+        row.append(box, btn); card.appendChild(row);
+        const pw = document.createElement('div'); pw.className = 'preview-wrap';
+        if (item.ext === 'jpg') pw.innerHTML = `<img src="${item.local}">`;
+        else if (item.ext === 'mp3') pw.innerHTML = `<audio controls src="${item.local}"></audio>`;
+        else pw.innerHTML = `<video controls src="${item.local}"></video>`;
+        card.appendChild(pw);
+      }
+      fileList.appendChild(card);
+    });
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { addFiles(Array.from(e.target.files)); fileInput.value = ''; });
+  ['dragenter', 'dragover'].forEach(v => dropzone.addEventListener(v, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(v => dropzone.addEventListener(v, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => addFiles(Array.from(e.dataTransfer.files)));
+  render();
+</script>
+</body>
+</html>
