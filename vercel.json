@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/:file([A-Za-z0-9]{8}\\.(?:mp3|mp4|jpg))",
-      "destination": "https://store_sNGFSSVYyjD5uWkA.public.blob.vercel-storage.com/:file"
-    }
+    { "source": "/:name", "destination": "/api/file?name=:name" }
   ]
 }
